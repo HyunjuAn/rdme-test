@@ -49,7 +49,7 @@
       "post": {
         "tags": ["pet"],
         "summary": "Add a new pet to the store 🐱",
-        "description": "hihihihihhihiihi",
+        "description": "hihihihihhihiihi22222",
         "operationId": "addPet",
         "parameters": [],
         "responses": {
