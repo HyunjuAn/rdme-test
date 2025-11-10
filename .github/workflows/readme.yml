@@ -74,7 +74,6 @@ jobs:
             --key=${{ secrets.README_API_KEY }}
             --slug=${{ secrets.README_API_DEFINITION_SLUG }}
             --version=${{ steps.branch.outputs.branch }}
-            --github
 
       # Guides 업로드 (변경 시에만) — 같은 태그면 같은 브랜치로 덮어쓰기
       - name: Sync Guides to ReadMe
@@ -85,7 +84,6 @@ jobs:
             docs upload ./docs/documentation
             --key=${{ secrets.README_API_KEY }}
             --branch=${{ steps.branch.outputs.branch }}
-            --github
 
       # Reference Markdown 업로드 (변경 시에만) — 같은 태그면 같은 브랜치로 덮어쓰기
       - name: Sync Reference Markdown to ReadMe
@@ -96,4 +94,3 @@ jobs:
             reference upload ./docs/reference
             --key=${{ secrets.README_API_KEY }}
             --branch=${{ steps.branch.outputs.branch }}
-            --github
