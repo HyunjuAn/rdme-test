@@ -1,10 +1,12 @@
 ---
-title: Authentication
+title: Authentication2ß
 category:
-  uri: USER MANAGEMENT API
+  uri: user-management-api
 slug: authentication
 position: 1
 ---
+test7
+
 
 > 모든 엔드포인트는 인증이 필요하며, 표준 Bearer 토큰 기반을 사용합니다.
 

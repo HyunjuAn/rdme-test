@@ -1,7 +1,7 @@
 ---
 title: Quick Start
 category:
-  uri: DOCUMENTATION
+  uri: documentation
 slug: quick-start
 position: 1
 ---

@@ -3,7 +3,7 @@ name: Sync API definition & guides/reference to ReadMe
 on:
   push:
     branches: [ "main" ]
-    tags:     [ "v*", "V*" ]    # 태그 푸시도 실행
+    tags:     [ "v*", "V*" ]
   workflow_dispatch: {}
 
 jobs:
@@ -15,54 +15,87 @@ jobs:
         with:
           fetch-depth: 0
 
-      # 변경 파일 감지 (브랜치 푸시일 때만 의미 있음)
-      - name: Detect changed files
-        id: diff
-        shell: bash
-        run: |
-          git fetch --tags
-          OPENAPI_CHANGED=$(git diff --name-only HEAD~1 HEAD | grep -c '^docs/petstore\.json$' || true)
-          DOCS_CHANGED=$(git diff --name-only HEAD~1 HEAD | grep -c '^docs/documentation/.*\.md$' || true)
-          REF_CHANGED=$(git diff --name-only HEAD~1 HEAD | grep -c '^docs/reference/.*\.md$' || true)
-          echo "openapi_changed=$OPENAPI_CHANGED" >> $GITHUB_OUTPUT
-          echo "docs_changed=$DOCS_CHANGED" >> $GITHUB_OUTPUT
-          echo "ref_changed=$REF_CHANGED" >> $GITHUB_OUTPUT
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
 
-      # 버전/브랜치 결정
+      # 1) ReadMe에 올릴 버전/브랜치 결정 (태그면 태그 그대로, 브랜치면 _1 붙임)
       - name: Resolve ReadMe version/branch
         id: branch
         shell: bash
         run: |
-          FALLBACK="v1.0"
+          set -euo pipefail
+          FALLBACK="v2025.10"
           BRANCH=""
+          BASE=""
 
           if [[ "${GITHUB_REF}" =~ ^refs/tags/ ]]; then
+            # 태그 푸시: 그대로 사용 (예: v2025.10.2)
             BRANCH="${GITHUB_REF#refs/tags/}"
           else
-            git fetch --tags
-            LATEST_TAG=$(git tag -l 'v*' --sort=-v:refname | head -n1)
-            if [ -n "$LATEST_TAG" ]; then
-              BRANCH="$LATEST_TAG"
-            elif [ -f "docs/petstore.json" ]; then
+            # 브랜치 푸시: 작업용 버전 구성
+            if [ -f "docs/petstore.json" ]; then
               VER=$(jq -r '.info.version // empty' docs/petstore.json || true)
               if [ -n "$VER" ]; then
-                [[ "$VER" =~ ^v ]] && BRANCH="$VER" || BRANCH="v$VER"
+                [[ "$VER" =~ ^v ]] && BASE="$VER" || BASE="v$VER"
               fi
             fi
-            [ -z "$BRANCH" ] && BRANCH="$FALLBACK"
-          fi
-
-          # ReadMe는 보통 vX.Y(브랜치)/ vX.Y_1(릴리즈) 구조 → 패치는 잘라냄
-          if [[ "$BRANCH" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            BRANCH="${BRANCH%.*}"   # v1.0.0 -> v1.0
+            # info.version이 없거나 파일이 없어도 BASE 보장
+            if [ -z "${BASE}" ]; then
+              BASE="$FALLBACK"
+            fi
+            # 브랜치용 버전: _1 suffix (원하시면 커밋 SHA 일부를 붙여도 됩니다)
+            BRANCH="${BASE}_1"
           fi
 
           echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
           echo "Using ReadMe branch: $BRANCH"
 
-      # OpenAPI 업로드: 태그 푸시거나, 변경됐을 때 수행
+      # 2) 해당 버전이 없으면 생성 (항상 안전하게 보장)
+      - name: Ensure ReadMe version exists
+        uses: readmeio/rdme@v10
+        with:
+          rdme: >
+            versions:create
+            --version=${{ steps.branch.outputs.branch }}
+            --from=main
+            --key=${{ secrets.README_API_KEY }}
+
+      # 3) 변경 파일 감지 (브랜치 푸시에서만 실행)
+      - name: Detect changed files
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+        id: diff
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --tags
+          OPENAPI_CHANGED=$(git diff --name-only HEAD~1 HEAD | grep -c '^docs/petstore\.json$' || true)
+          DOCS_CHANGED=$(git diff --name-only HEAD~1 HEAD | grep -E -c '^docs/documentation/.*\.(md|mdx)$' || true)
+          REF_CHANGED=$(git diff --name-only HEAD~1 HEAD | grep -E -c '^docs/reference/.*\.(md|mdx)$' || true)
+          echo "openapi_changed=$OPENAPI_CHANGED" >> $GITHUB_OUTPUT
+          echo "docs_changed=$DOCS_CHANGED" >> $GITHUB_OUTPUT
+          echo "ref_changed=$REF_CHANGED" >> $GITHUB_OUTPUT
+
+      # 4) OpenAPI 검증 (브랜치 푸시 + 변경 시에만)
+      - name: Validate OpenAPI
+        if: ${{ !startsWith(github.ref, 'refs/tags/') && steps.diff.outputs.openapi_changed != '0' }}
+        uses: readmeio/rdme@v10
+        with:
+          rdme: >
+            openapi validate ./docs/petstore.json
+
+      # 5) 태그 푸시라면 이 버전을 기본 버전으로 전환
+      - name: Set ReadMe version as default
+        if: ${{ startsWith(github.ref, 'refs/tags/') }}
+        uses: readmeio/rdme@v10
+        with:
+          rdme: >
+            versions:update ${{ steps.branch.outputs.branch }}
+            --is_default=true
+            --key=${{ secrets.README_API_KEY }}
+
+      # 6) OpenAPI 업로드 (태그 푸시 || 브랜치 푸시+변경)
       - name: Upload OpenAPI to ReadMe
-        if: startsWith(github.ref, 'refs/tags/') || steps.diff.outputs.openapi_changed != '0'
+        if: ${{ startsWith(github.ref, 'refs/tags/') || (!startsWith(github.ref, 'refs/tags/') && steps.diff.outputs.openapi_changed != '0') }}
         uses: readmeio/rdme@v10
         with:
           rdme: >
@@ -71,9 +104,9 @@ jobs:
             --slug=${{ secrets.README_API_DEFINITION_SLUG }}
             --version=${{ steps.branch.outputs.branch }}
 
-      # Guides 업로드: 태그 푸시거나, 변경됐을 때 수행
+      # 7) Guides 업로드 (태그 푸시 || 브랜치 푸시+변경)
       - name: Sync Guides to ReadMe
-        if: startsWith(github.ref, 'refs/tags/') || steps.diff.outputs.docs_changed != '0'
+        if: ${{ startsWith(github.ref, 'refs/tags/') || (!startsWith(github.ref, 'refs/tags/') && steps.diff.outputs.docs_changed != '0') }}
         uses: readmeio/rdme@v10
         with:
           rdme: >
@@ -81,9 +114,9 @@ jobs:
             --key=${{ secrets.README_API_KEY }}
             --branch=${{ steps.branch.outputs.branch }}
 
-      # Reference 업로드: 태그 푸시거나, 변경됐을 때 수행
+      # 8) Reference 업로드 (태그 푸시 || 브랜치 푸시+변경)
       - name: Sync Reference Markdown to ReadMe
-        if: startsWith(github.ref, 'refs/tags/') || steps.diff.outputs.ref_changed != '0'
+        if: ${{ startsWith(github.ref, 'refs/tags/') || (!startsWith(github.ref, 'refs/tags/') && steps.diff.outputs.ref_changed != '0') }}
         uses: readmeio/rdme@v10
         with:
           rdme: >
