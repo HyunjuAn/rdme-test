@@ -19,12 +19,12 @@
     }
   },
   "externalDocs": {
-    "description": "Find out more about Swagger",
+    "description": "Find out more about Swagger2",
     "url": "http://swagger.io"
   },
   "tags": [
     {
-      "name": "pet",
+      "name": "pet2",
       "description": "Everything about your Pets",
       "externalDocs": {
         "description": "Find out more",
