@@ -97,7 +97,7 @@ jobs:
             openapi upload ./docs/petstore.json
             --key=${{ secrets.README_API_KEY }}
             --slug=${{ secrets.README_API_DEFINITION_SLUG }}
-            --version=${{ steps.branch.outputs.branch }}
+            --branch=${{ steps.branch.outputs.branch }}
 
       # 7) Guides 업로드 (태그 푸시 || 브랜치 푸시+변경)
       - name: Upload Guides to ReadMe
@@ -118,6 +118,7 @@ jobs:
             reference upload ./docs/reference
             --key=${{ secrets.README_API_KEY }}
             --branch=${{ steps.branch.outputs.branch }}
+            
       # 9) 태그 푸시면: 해당 브랜치를 기본(stable)로 승격 (업로드들 뒤에 배치 권장)
       - name: Make ReadMe branch default (stable) on tag push
         if: ${{ startsWith(github.ref, 'refs/tags/') }}
