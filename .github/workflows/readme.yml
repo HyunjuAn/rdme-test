@@ -50,15 +50,20 @@ jobs:
           echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
           echo "Using ReadMe branch: $BRANCH"
 
-      # 2) 해당 버전이 없으면 생성 (항상 안전하게 보장)
-      - name: Ensure ReadMe version exists
-        uses: readmeio/rdme@v10
-        with:
-          rdme: >
-            versions:update
-            --version=${{ steps.branch.outputs.branch }}
-            --from=main
-            --key=${{ secrets.README_API_KEY }}
+      # 2) 해당 브랜치(버전) 없으면 생성 (Refactored: API v2 사용)
+      - name: Ensure ReadMe branch exists
+        env:
+          RDME_TOKEN: ${{ secrets.README_API_KEY }}
+          TARGET_BRANCH: ${{ steps.branch.outputs.branch }}
+          FROM_BRANCH: main        # 복사 기준(ReadMe 프로젝트에 존재하는 브랜치명으로 조정 가능)
+        run: |
+          set -e
+          # 이미 있으면 409 Conflict가 날 수 있으므로 실패 처리하지 않음
+          curl -sS -X POST "https://api.readme.com/v2/branches" \
+            -H "Authorization: Bearer ${RDME_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d "{\"name\":\"${TARGET_BRANCH}\",\"from\":\"${FROM_BRANCH}\"}" \
+            || true
 
       # 3) 변경 파일 감지 (브랜치 푸시에서만 실행)
       - name: Detect changed files
@@ -113,3 +118,24 @@ jobs:
             reference upload ./docs/reference
             --key=${{ secrets.README_API_KEY }}
             --branch=${{ steps.branch.outputs.branch }}
+      # 9) 태그 푸시면: 해당 브랜치를 기본(stable)로 승격 (업로드들 뒤에 배치 권장)
+      - name: Make ReadMe branch default (stable) on tag push
+        if: ${{ startsWith(github.ref, 'refs/tags/') }}
+        shell: bash
+        env:
+          RDME_TOKEN: ${{ secrets.README_API_KEY }}
+        run: |
+          set -euo pipefail
+          BR="${GITHUB_REF#refs/tags/}"
+
+          # (안전) 브랜치가 없으면 생성 시도
+          curl -sS -X POST "https://api.readme.com/v2/branches" \
+            -H "Authorization: Bearer ${RDME_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d "{\"name\":\"${BR}\",\"from\":\"stable\"}" || true
+
+          # 기본(stable)로 승격
+          curl -sS -X PATCH "https://api.readme.com/v2/branches/${BR}" \
+            -H "Authorization: Bearer ${RDME_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d '{ "role": "stable" }'

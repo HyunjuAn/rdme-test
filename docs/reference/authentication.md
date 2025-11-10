@@ -5,7 +5,7 @@ category:
 slug: authentication
 position: 1
 ---
-test8
+test9
 
 
 > 모든 엔드포인트는 인증이 필요하며, 표준 Bearer 토큰 기반을 사용합니다.
