@@ -83,16 +83,6 @@ jobs:
           rdme: >
             openapi validate ./docs/petstore.json
 
-      # 5) 태그 푸시라면 이 버전을 기본 버전으로 전환
-      - name: Set ReadMe version as default
-        if: ${{ startsWith(github.ref, 'refs/tags/') }}
-        uses: readmeio/rdme@v10
-        with:
-          rdme: >
-            versions:update ${{ steps.branch.outputs.branch }}
-            --is_default=true
-            --key=${{ secrets.README_API_KEY }}
-
       # 6) OpenAPI 업로드 (태그 푸시 || 브랜치 푸시+변경)
       - name: Upload OpenAPI to ReadMe
         if: ${{ startsWith(github.ref, 'refs/tags/') || (!startsWith(github.ref, 'refs/tags/') && steps.diff.outputs.openapi_changed != '0') }}
@@ -105,7 +95,7 @@ jobs:
             --version=${{ steps.branch.outputs.branch }}
 
       # 7) Guides 업로드 (태그 푸시 || 브랜치 푸시+변경)
-      - name: Sync Guides to ReadMe
+      - name: Upload Guides to ReadMe
         if: ${{ startsWith(github.ref, 'refs/tags/') || (!startsWith(github.ref, 'refs/tags/') && steps.diff.outputs.docs_changed != '0') }}
         uses: readmeio/rdme@v10
         with:
@@ -115,7 +105,7 @@ jobs:
             --branch=${{ steps.branch.outputs.branch }}
 
       # 8) Reference 업로드 (태그 푸시 || 브랜치 푸시+변경)
-      - name: Sync Reference Markdown to ReadMe
+      - name: Upload Reference Markdown to ReadMe
         if: ${{ startsWith(github.ref, 'refs/tags/') || (!startsWith(github.ref, 'refs/tags/') && steps.diff.outputs.ref_changed != '0') }}
         uses: readmeio/rdme@v10
         with:
