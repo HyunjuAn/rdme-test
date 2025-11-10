@@ -1,23 +1,99 @@
-name: Sync OpenAPI definition to ReadMe
+name: Sync API definition & guides/reference to ReadMe
 
-# Run workflow for every push to the `main` branch
 on:
   push:
-    branches:
-      - main
+    branches: [ "main" ]
+    tags:     [ "v*", "V*" ]                 # 태그 푸시도 실행
+    paths:
+      - "docs/petstore.json"                 # OpenAPI
+      - "docs/documentation/*.md"            # Guides
+      - "docs/reference/*.md"                # Reference md
+  workflow_dispatch: {}
 
 jobs:
   sync:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout this repo
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0                      # 태그/히스토리 필요
 
-      # Run GitHub Action to sync OpenAPI file at ./path-to-file.json
-      - name: GitHub Action
-        # We recommend specifying a fixed version, i.e. @v10
-        # Docs: https://docs.github.com/actions/using-workflows/workflow-syntax-for-github-actions#example-using-versioned-actions
+      # 변경 파일 감지 (경로 패턴과 일치)
+      - name: Detect changed files
+        id: diff
+        shell: bash
+        run: |
+          git fetch --tags
+          OPENAPI_CHANGED=$(git diff --name-only HEAD~1 HEAD | grep -c '^docs/petstore\.json$' || true)
+          DOCS_CHANGED=$(git diff --name-only HEAD~1 HEAD | grep -c '^docs/documentation/.*\.md$' || true)
+          REF_CHANGED=$(git diff --name-only HEAD~1 HEAD | grep -c '^docs/reference/.*\.md$' || true)
+          echo "openapi_changed=$OPENAPI_CHANGED" >> $GITHUB_OUTPUT
+          echo "docs_changed=$DOCS_CHANGED" >> $GITHUB_OUTPUT
+          echo "ref_changed=$REF_CHANGED" >> $GITHUB_OUTPUT
+
+      # 버전/브랜치 결정 로직
+      # 1) 태그 푸시면 그 태그 그대로
+      # 2) 아니면 가장 최신 SemVer 태그(v*) 선택
+      # 3) 태그가 없으면 OpenAPI info.version → v<info.version>
+      # 4) 그래도 없으면 v1.0
+      - name: Resolve ReadMe version/branch
+        id: branch
+        shell: bash
+        run: |
+          FALLBACK="v1.0"
+          BRANCH=""
+
+          if [[ "${GITHUB_REF}" =~ ^refs/tags/ ]]; then
+            BRANCH="${GITHUB_REF#refs/tags/}"
+          else
+            git fetch --tags
+            # SemVer 내림차순 정렬: v10 > v2 > v1 ...
+            LATEST_TAG=$(git tag -l 'v*' --sort=-v:refname | head -n1)
+            if [ -n "$LATEST_TAG" ]; then
+              BRANCH="$LATEST_TAG"
+            elif [ -f "docs/petstore.json" ]; then
+              VER=$(jq -r '.info.version // empty' docs/petstore.json || true)
+              if [ -n "$VER" ]; then
+                [[ "$VER" =~ ^v ]] && BRANCH="$VER" || BRANCH="v$VER"
+              fi
+            fi
+
+            [ -z "$BRANCH" ] && BRANCH="$FALLBACK"
+          fi
+
+          echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
+          echo "Using ReadMe branch: $BRANCH"
+
+      # OpenAPI 업로드 (변경 시에만) — 같은 태그면 같은 브랜치로 덮어쓰기
+      - name: Upload OpenAPI to ReadMe
+        if: steps.diff.outputs.openapi_changed != '0'
         uses: readmeio/rdme@v10
         with:
-          rdme: openapi upload ./petstore.json --key=${{ secrets.README_API_KEY }} --slug=API_DEFINITION_SLUG
+          rdme: >
+            openapi upload ./docs/petstore.json
+            --key=${{ secrets.README_API_KEY }}
+            --slug=${{ secrets.README_API_DEFINITION_SLUG }}
+            --version=${{ steps.branch.outputs.branch }}
+            --github
 
+      # Guides 업로드 (변경 시에만) — 같은 태그면 같은 브랜치로 덮어쓰기
+      - name: Sync Guides to ReadMe
+        if: steps.diff.outputs.docs_changed != '0'
+        uses: readmeio/rdme@v10
+        with:
+          rdme: >
+            docs upload ./docs/documentation
+            --key=${{ secrets.README_API_KEY }}
+            --branch=${{ steps.branch.outputs.branch }}
+            --github
+
+      # Reference Markdown 업로드 (변경 시에만) — 같은 태그면 같은 브랜치로 덮어쓰기
+      - name: Sync Reference Markdown to ReadMe
+        if: steps.diff.outputs.ref_changed != '0'
+        uses: readmeio/rdme@v10
+        with:
+          rdme: >
+            reference upload ./docs/reference
+            --key=${{ secrets.README_API_KEY }}
+            --branch=${{ steps.branch.outputs.branch }}
+            --github
