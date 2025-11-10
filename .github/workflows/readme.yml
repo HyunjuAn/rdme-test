@@ -3,11 +3,7 @@ name: Sync API definition & guides/reference to ReadMe
 on:
   push:
     branches: [ "main" ]
-    tags:     [ "v*", "V*" ]                 # 태그 푸시도 실행
-    paths:
-      - "docs/petstore.json"                 # OpenAPI
-      - "docs/documentation/*.md"            # Guides
-      - "docs/reference/*.md"                # Reference md
+    tags:     [ "v*", "V*" ]    # 태그 푸시도 실행
   workflow_dispatch: {}
 
 jobs:
@@ -17,9 +13,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0                      # 태그/히스토리 필요
+          fetch-depth: 0
 
-      # 변경 파일 감지 (경로 패턴과 일치)
+      # 변경 파일 감지 (브랜치 푸시일 때만 의미 있음)
       - name: Detect changed files
         id: diff
         shell: bash
@@ -32,11 +28,7 @@ jobs:
           echo "docs_changed=$DOCS_CHANGED" >> $GITHUB_OUTPUT
           echo "ref_changed=$REF_CHANGED" >> $GITHUB_OUTPUT
 
-      # 버전/브랜치 결정 로직
-      # 1) 태그 푸시면 그 태그 그대로
-      # 2) 아니면 가장 최신 SemVer 태그(v*) 선택
-      # 3) 태그가 없으면 OpenAPI info.version → v<info.version>
-      # 4) 그래도 없으면 v1.0
+      # 버전/브랜치 결정
       - name: Resolve ReadMe version/branch
         id: branch
         shell: bash
@@ -48,7 +40,6 @@ jobs:
             BRANCH="${GITHUB_REF#refs/tags/}"
           else
             git fetch --tags
-            # SemVer 내림차순 정렬: v10 > v2 > v1 ...
             LATEST_TAG=$(git tag -l 'v*' --sort=-v:refname | head -n1)
             if [ -n "$LATEST_TAG" ]; then
               BRANCH="$LATEST_TAG"
@@ -58,16 +49,20 @@ jobs:
                 [[ "$VER" =~ ^v ]] && BRANCH="$VER" || BRANCH="v$VER"
               fi
             fi
-
             [ -z "$BRANCH" ] && BRANCH="$FALLBACK"
+          fi
+
+          # ReadMe는 보통 vX.Y(브랜치)/ vX.Y_1(릴리즈) 구조 → 패치는 잘라냄
+          if [[ "$BRANCH" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            BRANCH="${BRANCH%.*}"   # v1.0.0 -> v1.0
           fi
 
           echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
           echo "Using ReadMe branch: $BRANCH"
 
-      # OpenAPI 업로드 (변경 시에만) — 같은 태그면 같은 브랜치로 덮어쓰기
+      # OpenAPI 업로드: 태그 푸시거나, 변경됐을 때 수행
       - name: Upload OpenAPI to ReadMe
-        if: steps.diff.outputs.openapi_changed != '0'
+        if: startsWith(github.ref, 'refs/tags/') || steps.diff.outputs.openapi_changed != '0'
         uses: readmeio/rdme@v10
         with:
           rdme: >
@@ -76,9 +71,9 @@ jobs:
             --slug=${{ secrets.README_API_DEFINITION_SLUG }}
             --version=${{ steps.branch.outputs.branch }}
 
-      # Guides 업로드 (변경 시에만) — 같은 태그면 같은 브랜치로 덮어쓰기
+      # Guides 업로드: 태그 푸시거나, 변경됐을 때 수행
       - name: Sync Guides to ReadMe
-        if: steps.diff.outputs.docs_changed != '0'
+        if: startsWith(github.ref, 'refs/tags/') || steps.diff.outputs.docs_changed != '0'
         uses: readmeio/rdme@v10
         with:
           rdme: >
@@ -86,9 +81,9 @@ jobs:
             --key=${{ secrets.README_API_KEY }}
             --branch=${{ steps.branch.outputs.branch }}
 
-      # Reference Markdown 업로드 (변경 시에만) — 같은 태그면 같은 브랜치로 덮어쓰기
+      # Reference 업로드: 태그 푸시거나, 변경됐을 때 수행
       - name: Sync Reference Markdown to ReadMe
-        if: steps.diff.outputs.ref_changed != '0'
+        if: startsWith(github.ref, 'refs/tags/') || steps.diff.outputs.ref_changed != '0'
         uses: readmeio/rdme@v10
         with:
           rdme: >

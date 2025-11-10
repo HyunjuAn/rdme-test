@@ -1,10 +1,19 @@
 ---
 title: Authentication
 category:
-  uri: api-basics        # Reference 섹션의 카테고리 uri
-slug: authentication-1   # 페이지 slug를 URL과 맞추려면 명시
-position: 10             # 선택: 사이드바 순서
-parent:
-  uri: authentication    # 선택: 부모 페이지가 있으면
+  uri: USER MANAGEMENT API
+slug: authentication
+position: 1
 ---
-hihi test2
+
+> 모든 엔드포인트는 인증이 필요하며, 표준 Bearer 토큰 기반을 사용합니다.
+
+## Overview
+- **방식**: Bearer 토큰 (API Key 또는 OAuth2 토큰)
+- **헤더**: `Authorization: Bearer <token>`
+- **전송**: HTTPS 필수
+
+요청 헤더 예시:
+```http
+Authorization: Bearer YOUR_API_KEY
+Content-Type: application/json
