@@ -1,5 +1,8 @@
 ---
 title: Getting Started with estplatformtest
+category:
+  uri: docs
+slug: getting-started
 excerpt: >-
   This page will help you get started with estplatformtest. You'll be up and
   running in a jiffy!

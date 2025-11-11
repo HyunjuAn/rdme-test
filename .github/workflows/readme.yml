@@ -3,140 +3,46 @@ name: Sync API definition & guides/reference to ReadMe
 on:
   push:
     branches: [ "main" ]
-    tags:     [ "v*", "V*" ]
-  workflow_dispatch: {}
 
 jobs:
   sync:
     runs-on: ubuntu-latest
-    environment: README
+    environment: README 
+    env:
+      RDME_VERSION: v2.0_1   #  최종적으로 업로드할 ReadMe 브랜치 버전 지정
+      RDME_API_KEY: ${{ secrets.README_API_KEY }}
+      OAS_PATH: ./docs/petstore.json
+      GUIDES_DIR: ./docs/documentation
+      REF_DIR: ./docs/reference
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      - name: Install jq
-        run: sudo apt-get update && sudo apt-get install -y jq
 
-      # 1) ReadMe에 올릴 버전/브랜치 결정 (태그면 태그 그대로, 브랜치면 _1 붙임)
-      - name: Resolve ReadMe version/branch
-        id: branch
-        shell: bash
-        run: |
-          set -euo pipefail
-          FALLBACK="v2025.10"
-          BRANCH=""
-          BASE=""
 
-          if [[ "${GITHUB_REF}" =~ ^refs/tags/ ]]; then
-            # 태그 푸시: 그대로 사용 (예: v2025.10.2)
-            BRANCH="${GITHUB_REF#refs/tags/}"
-          else
-            # 브랜치 푸시: 작업용 버전 구성
-            if [ -f "docs/petstore.json" ]; then
-              VER=$(jq -r '.info.version // empty' docs/petstore.json || true)
-              if [ -n "$VER" ]; then
-                [[ "$VER" =~ ^v ]] && BASE="$VER" || BASE="v$VER"
-              fi
-            fi
-            # info.version이 없거나 파일이 없어도 BASE 보장
-            if [ -z "${BASE}" ]; then
-              BASE="$FALLBACK"
-            fi
-            # 브랜치용 버전: _1 suffix (원하시면 커밋 SHA 일부를 붙여도 됩니다)
-            BRANCH="${BASE}_1"
-          fi
-
-          echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
-          echo "Using ReadMe branch: $BRANCH"
-
-      # 2) 해당 브랜치(버전) 없으면 생성 (Refactored: API v2 사용)
-      - name: Ensure ReadMe branch exists
-        env:
-          RDME_TOKEN: ${{ secrets.README_API_KEY }}
-          TARGET_BRANCH: ${{ steps.branch.outputs.branch }}
-          FROM_BRANCH: main        # 복사 기준(ReadMe 프로젝트에 존재하는 브랜치명으로 조정 가능)
-        run: |
-          set -e
-          # 이미 있으면 409 Conflict가 날 수 있으므로 실패 처리하지 않음
-          curl -sS -X POST "https://api.readme.com/v2/branches" \
-            -H "Authorization: Bearer ${RDME_TOKEN}" \
-            -H "Content-Type: application/json" \
-            -d "{\"name\":\"${TARGET_BRANCH}\",\"from\":\"${FROM_BRANCH}\"}" \
-            || true
-
-      # 3) 변경 파일 감지 (브랜치 푸시에서만 실행)
-      - name: Detect changed files
-        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
-        id: diff
-        shell: bash
-        run: |
-          set -euo pipefail
-          git fetch --tags
-          OPENAPI_CHANGED=$(git diff --name-only HEAD~1 HEAD | grep -c '^docs/petstore\.json$' || true)
-          DOCS_CHANGED=$(git diff --name-only HEAD~1 HEAD | grep -E -c '^docs/documentation/.*\.(md|mdx)$' || true)
-          REF_CHANGED=$(git diff --name-only HEAD~1 HEAD | grep -E -c '^docs/reference/.*\.(md|mdx)$' || true)
-          echo "openapi_changed=$OPENAPI_CHANGED" >> $GITHUB_OUTPUT
-          echo "docs_changed=$DOCS_CHANGED" >> $GITHUB_OUTPUT
-          echo "ref_changed=$REF_CHANGED" >> $GITHUB_OUTPUT
-
-      # 4) OpenAPI 검증 (브랜치 푸시 + 변경 시에만)
-      - name: Validate OpenAPI
-        if: ${{ !startsWith(github.ref, 'refs/tags/') && steps.diff.outputs.openapi_changed != '0' }}
-        uses: readmeio/rdme@v10
-        with:
-          rdme: >
-            openapi validate ./docs/petstore.json
-
-      # 6) OpenAPI 업로드 (태그 푸시 || 브랜치 푸시+변경)
+      # 1) OpenAPI 업로드 
       - name: Upload OpenAPI to ReadMe
-        if: ${{ startsWith(github.ref, 'refs/tags/') || (!startsWith(github.ref, 'refs/tags/') && steps.diff.outputs.openapi_changed != '0') }}
         uses: readmeio/rdme@v10
         with:
           rdme: >
-            openapi upload ./docs/petstore.json
-            --key=${{ secrets.README_API_KEY }}
-            --slug=${{ secrets.README_API_DEFINITION_SLUG }}
-            --branch=${{ steps.branch.outputs.branch }}
+            openapi upload ${{ env.OAS_PATH }}
+            --key=${{ env.RDME_API_KEY }}
+            --branch=${{ env.RDME_VERSION }}
 
-      # 7) Guides 업로드 (태그 푸시 || 브랜치 푸시+변경)
+      # 2) Guides 업로드
       - name: Upload Guides to ReadMe
-        if: ${{ startsWith(github.ref, 'refs/tags/') || (!startsWith(github.ref, 'refs/tags/') && steps.diff.outputs.docs_changed != '0') }}
         uses: readmeio/rdme@v10
         with:
           rdme: >
-            docs upload ./docs/documentation
-            --key=${{ secrets.README_API_KEY }}
-            --branch=${{ steps.branch.outputs.branch }}
+            docs upload ${{ env.GUIDES_DIR }}
+            --key=${{ env.RDME_API_KEY }}
+            --branch=${{ env.RDME_VERSION }}
 
-      # 8) Reference 업로드 (태그 푸시 || 브랜치 푸시+변경)
+
+      # 3) Reference 업로드
       - name: Upload Reference Markdown to ReadMe
-        if: ${{ startsWith(github.ref, 'refs/tags/') || (!startsWith(github.ref, 'refs/tags/') && steps.diff.outputs.ref_changed != '0') }}
         uses: readmeio/rdme@v10
         with:
           rdme: >
-            reference upload ./docs/reference
-            --key=${{ secrets.README_API_KEY }}
-            --branch=${{ steps.branch.outputs.branch }}
-            
-      # 9) 태그 푸시면: 해당 브랜치를 기본(stable)로 승격 (업로드들 뒤에 배치 권장)
-      - name: Make ReadMe branch default (stable) on tag push
-        if: ${{ startsWith(github.ref, 'refs/tags/') }}
-        shell: bash
-        env:
-          RDME_TOKEN: ${{ secrets.README_API_KEY }}
-        run: |
-          set -euo pipefail
-          BR="${GITHUB_REF#refs/tags/}"
-
-          # (안전) 브랜치가 없으면 생성 시도
-          curl -sS -X POST "https://api.readme.com/v2/branches" \
-            -H "Authorization: Bearer ${RDME_TOKEN}" \
-            -H "Content-Type: application/json" \
-            -d "{\"name\":\"${BR}\",\"from\":\"stable\"}" || true
-
-          # 기본(stable)로 승격
-          curl -sS -X PATCH "https://api.readme.com/v2/branches/${BR}" \
-            -H "Authorization: Bearer ${RDME_TOKEN}" \
-            -H "Content-Type: application/json" \
-            -d '{ "role": "stable" }'
+            reference upload ${{ env.REF_DIR }}
+            --key=${{ env.RDME_API_KEY }}
+            --branch=${{ env.RDME_VERSION }}
