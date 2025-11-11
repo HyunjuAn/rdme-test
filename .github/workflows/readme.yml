@@ -12,14 +12,20 @@ jobs:
       RDME_VERSION: v2.0_1   #  최종적으로 업로드할 ReadMe 브랜치 버전 지정
       RDME_API_KEY: ${{ secrets.README_API_KEY }}
       OAS_PATH: ./docs/petstore.json
-      GUIDES_DIR: ./docs/documentation
-      REF_DIR: ./docs/reference
+      GUIDES_DIR: ./docs
+      REF_DIR: ./reference
     steps:
       - uses: actions/checkout@v4
 
+      # 1) OpenAPI 존재 여부 컴토
+      - name: Validate OpenAPI
+        uses: readmeio/rdme@v10
+        with:
+          rdme: >
+            openapi validate ${{ env.OAS_PATH }}
 
 
-      # 1) OpenAPI 업로드 
+      # 2) OpenAPI 업로드 
       - name: Upload OpenAPI to ReadMe
         uses: readmeio/rdme@v10
         with:
@@ -28,7 +34,7 @@ jobs:
             --key=${{ env.RDME_API_KEY }}
             --branch=${{ env.RDME_VERSION }}
 
-      # 2) Guides 업로드
+      # 3) Guides 업로드
       - name: Upload Guides to ReadMe
         uses: readmeio/rdme@v10
         with:
@@ -37,8 +43,7 @@ jobs:
             --key=${{ env.RDME_API_KEY }}
             --branch=${{ env.RDME_VERSION }}
 
-
-      # 3) Reference 업로드
+      # 4) Reference 업로드
       - name: Upload Reference Markdown to ReadMe
         uses: readmeio/rdme@v10
         with:
