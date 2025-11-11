@@ -1,12 +1,13 @@
 ---
-title: Getting Started with estplatformtest
+title: Getting Started
 category:
-  uri: docs
-slug: getting-started
-excerpt: >-
-  This page will help you get started with estplatformtest. You'll be up and
-  running in a jiffy!
-hidden: false
+  uri: documentation
+content:
+  excerpt: >-
+    This page will help you get started with estplatformtest. You'll be up and
+    running in a jiffy!
+privacy:
+  view: public
 ---
 # Welcome to ReadMe
 

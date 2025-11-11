@@ -1,9 +1,8 @@
 ---
-title: Authentication2
+title: Authentication1
 category:
   uri: reference
-slug: authentication2
-position: 2
+position: 1
 ---
 test10
 

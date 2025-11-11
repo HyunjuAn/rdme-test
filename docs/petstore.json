@@ -48,8 +48,8 @@
     "/pet": {
       "post": {
         "tags": ["pet"],
-        "summary": "test10",
-        "description": "hihihihihhihiihi22222",
+        "summary": "test11",
+        "description": "hi11",
         "operationId": "addPet",
         "parameters": [],
         "responses": {

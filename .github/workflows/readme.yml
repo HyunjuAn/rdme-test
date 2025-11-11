@@ -9,11 +9,11 @@ jobs:
     runs-on: ubuntu-latest
     environment: README 
     env:
-      RDME_VERSION: v2.0_1   #  최종적으로 업로드할 ReadMe 브랜치 버전 지정
+      RDME_VERSION: v2.0_4   #  최종적으로 업로드할 ReadMe 브랜치 버전 지정
       RDME_API_KEY: ${{ secrets.README_API_KEY }}
+      RDME_SLUG: petstore        
       OAS_PATH: ./docs/petstore.json
       GUIDES_DIR: ./docs
-      REF_DIR: ./reference
     steps:
       - uses: actions/checkout@v4
 
@@ -32,6 +32,7 @@ jobs:
           rdme: >
             openapi upload ${{ env.OAS_PATH }}
             --key=${{ env.RDME_API_KEY }}
+            --slug=${{ env.RDME_SLUG }}
             --branch=${{ env.RDME_VERSION }}
 
       # 3) Guides 업로드
@@ -48,6 +49,6 @@ jobs:
         uses: readmeio/rdme@v10
         with:
           rdme: >
-            reference upload ${{ env.REF_DIR }}
+            reference upload ${{ env.GUIDES_DIR }}
             --key=${{ env.RDME_API_KEY }}
             --branch=${{ env.RDME_VERSION }}
